@@ -10,12 +10,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score, classification_report, roc_auc_score, f1_score
-from sklearn.pipeline import Pipeline
 import joblib
-import os
 
 # Step 1: App Title
-st.title("Advanced Machine Learning Pipeline App")
+st.title("Machine Learning Laboratory")
 
 # Step 2: Data Upload/Entry
 st.header("Step 1: Data Upload")
@@ -70,7 +68,7 @@ if data is not None and target_column and feature_columns:
     elif model_choice == "Logistic Regression":
         model = LogisticRegression()
     elif model_choice == "SVM":
-        model = SVC()
+        model = SVC(probability=True)
     elif model_choice == "Random Forest":
         n_estimators = st.slider("Number of Trees", 10, 200, 100)
         model = RandomForestClassifier(n_estimators=n_estimators)
@@ -88,9 +86,10 @@ if data is not None and target_column and feature_columns:
             hidden_layer_sizes.append(layer_size)
             activation_functions.append(activation_function)
 
+        output_activation = st.selectbox("Output Layer Activation Function", ["identity", "logistic", "tanh", "relu"])
         model = MLPClassifier(hidden_layer_sizes=tuple(hidden_layer_sizes), activation=activation_functions[0])
 
-# Step 6: Train Model
+# Step 6: Train Model and Save Train/Test Split to Session State
     st.header("Step 5: Training")
     if st.button("Train Model"):
         if scaler:
@@ -99,6 +98,11 @@ if data is not None and target_column and feature_columns:
         if validation_type == "Holdout":
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
             model.fit(X_train, y_train)
+            st.session_state['X_train'] = X_train
+            st.session_state['X_test'] = X_test
+            st.session_state['y_train'] = y_train
+            st.session_state['y_test'] = y_test
+            st.session_state['model'] = model
             st.write("Model trained successfully!")
         elif validation_type == "K-Fold Cross-Validation":
             kf = StratifiedKFold(n_splits=k_folds)
@@ -106,11 +110,22 @@ if data is not None and target_column and feature_columns:
                 X_train, X_test = X[train_index], X[test_index]
                 y_train, y_test = y[train_index], y[test_index]
                 model.fit(X_train, y_train)
+            st.session_state['X_train'] = X_train
+            st.session_state['X_test'] = X_test
+            st.session_state['y_train'] = y_train
+            st.session_state['y_test'] = y_test
+            st.session_state['model'] = model
             st.write("K-Fold Cross-Validation training completed.")
 
-# Step 7: Evaluation Metrics
+# Step 7: Evaluation Metrics with Buttons
     st.header("Step 6: Evaluation")
-    if validation_type == "Holdout" and st.button("Evaluate Model"):
+    if 'X_test' in st.session_state and 'model' in st.session_state:
+        X_train = st.session_state['X_train']
+        X_test = st.session_state['X_test']
+        y_train = st.session_state['y_train']
+        y_test = st.session_state['y_test']
+        model = st.session_state['model']
+        
         y_pred_train = model.predict(X_train)
         y_pred_test = model.predict(X_test)
 
@@ -158,6 +173,7 @@ if data is not None and target_column and feature_columns:
     uploaded_model = st.file_uploader("Upload a Saved Model", type=["pkl"])
     if uploaded_model:
         loaded_model = joblib.load(uploaded_model)
+        st.session_state['model'] = loaded_model
         st.write("Loaded model. Enter data to make predictions.")
 
 # Step 10: Single-Sample Prediction
@@ -170,9 +186,9 @@ if data is not None and target_column and feature_columns:
         single_sample.append(value)
 
     if st.button("Predict on Single Sample"):
-        if uploaded_model or model:
+        if 'model' in st.session_state:
             sample = np.array(single_sample).reshape(1, -1)
             if scaler:
                 sample = scaler.transform(sample)
-            prediction = model.predict(sample)
+            prediction = st.session_state['model'].predict(sample)
             st.write("Prediction for entered sample:", prediction[0])
