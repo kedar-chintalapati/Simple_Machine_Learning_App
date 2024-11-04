@@ -64,8 +64,21 @@ elif model_choice == "Neural Network":
 
 # Step 5: Train Model
 if st.button("Train Model"):
-    X = data.drop(columns=['target'])
-    y = data['target']
+    # After uploading the data
+    data = pd.read_csv(uploaded_file)
+    st.write("Data Preview:")
+    st.write(data.head())
+        
+        # Let the user select the target column
+    target_column = st.selectbox("Select the target column (output)", data.columns)
+        
+        # Select features automatically (all columns except target) or allow manual selection
+    feature_columns = st.multiselect("Select feature columns (input)", data.columns.drop(target_column), default=data.columns.drop(target_column))
+        
+        # Define X and y based on selections
+    X = data[feature_columns]
+    y = data[target_column]
+
     
     # Preprocess data if necessary
     if scaling_option == "Standard Scaling":
