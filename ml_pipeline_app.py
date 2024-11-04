@@ -9,13 +9,13 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neural_network import MLPClassifier
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, roc_auc_score, f1_score
 from sklearn.pipeline import Pipeline
 import joblib
 import os
 
 # Step 1: App Title
-st.title("Machine Learning Pipeline App")
+st.title("Advanced Machine Learning Pipeline App")
 
 # Step 2: Data Upload/Entry
 st.header("Step 1: Data Upload")
@@ -32,7 +32,6 @@ if uploaded_file:
     target_column = st.selectbox("Select the target column (output)", data.columns)
     feature_columns = st.multiselect("Select feature columns (input)", data.columns.drop(target_column))
 
-    # Ensure features and target are selected before proceeding
     if target_column and feature_columns:
         X = data[feature_columns]
         y = data[target_column]
@@ -45,8 +44,6 @@ else:
 if data is not None and target_column and feature_columns:
     st.header("Step 2: Preprocessing")
     scaling_option = st.selectbox("Choose a scaling method", ["None", "Standard Scaling", "Min-Max Scaling"])
-
-    # Apply scaling based on user choice
     if scaling_option == "Standard Scaling":
         scaler = StandardScaler()
     elif scaling_option == "Min-Max Scaling":
@@ -62,11 +59,11 @@ if data is not None and target_column and feature_columns:
     if validation_type == "K-Fold Cross-Validation":
         k_folds = st.slider("Number of Folds", 2, 10, 5)
 
-# Step 5: Model Selection and Initial Hyperparameters
+# Step 5: Model Selection and Customization for Neural Networks
     st.header("Step 4: Model Selection")
     model_choice = st.selectbox("Choose Model", ["K-Nearest Neighbors", "Logistic Regression", "SVM", "Random Forest", "Decision Tree", "Neural Network"])
-    
-    # Initialize model with default or user-selected hyperparameters
+
+    # Initialize model with user-selected hyperparameters and settings
     if model_choice == "K-Nearest Neighbors":
         n_neighbors = st.slider("Number of Neighbors (k)", 1, 20, 5)
         model = KNeighborsClassifier(n_neighbors=n_neighbors)
@@ -80,8 +77,18 @@ if data is not None and target_column and feature_columns:
     elif model_choice == "Decision Tree":
         model = DecisionTreeClassifier()
     elif model_choice == "Neural Network":
-        hidden_layer_sizes = st.slider("Hidden Layer Sizes", 10, 200, 100)
-        model = MLPClassifier(hidden_layer_sizes=(hidden_layer_sizes,))
+        st.subheader("Neural Network Configuration")
+        num_layers = st.slider("Number of Hidden Layers", 1, 5, 1)
+        hidden_layer_sizes = []
+        activation_functions = []
+
+        for i in range(num_layers):
+            layer_size = st.number_input(f"Size of Layer {i + 1}", min_value=1, max_value=200, value=100, step=10)
+            activation_function = st.selectbox(f"Activation Function for Layer {i + 1}", ["relu", "tanh", "logistic"], key=f"activation_{i}")
+            hidden_layer_sizes.append(layer_size)
+            activation_functions.append(activation_function)
+
+        model = MLPClassifier(hidden_layer_sizes=tuple(hidden_layer_sizes), activation=activation_functions[0])
 
 # Step 6: Train Model
     st.header("Step 5: Training")
@@ -92,23 +99,39 @@ if data is not None and target_column and feature_columns:
         if validation_type == "Holdout":
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
             model.fit(X_train, y_train)
-            y_pred = model.predict(X_test)
-            st.write("Accuracy:", accuracy_score(y_test, y_pred))
-            st.write("Classification Report:")
-            st.text(classification_report(y_test, y_pred))
+            st.write("Model trained successfully!")
         elif validation_type == "K-Fold Cross-Validation":
             kf = StratifiedKFold(n_splits=k_folds)
-            accuracies = []
             for train_index, test_index in kf.split(X, y):
                 X_train, X_test = X[train_index], X[test_index]
                 y_train, y_test = y[train_index], y[test_index]
                 model.fit(X_train, y_train)
-                y_pred = model.predict(X_test)
-                accuracies.append(accuracy_score(y_test, y_pred))
-            st.write("Average Accuracy:", np.mean(accuracies))
+            st.write("K-Fold Cross-Validation training completed.")
 
-# Step 7: Hyperparameter Tuning
-    st.header("Step 6: Hyperparameter Tuning")
+# Step 7: Evaluation Metrics
+    st.header("Step 6: Evaluation")
+    if validation_type == "Holdout" and st.button("Evaluate Model"):
+        y_pred_train = model.predict(X_train)
+        y_pred_test = model.predict(X_test)
+
+        if st.button("Train Accuracy"):
+            st.write("Train Accuracy:", accuracy_score(y_train, y_pred_train))
+
+        if st.button("Test Accuracy"):
+            st.write("Test Accuracy:", accuracy_score(y_test, y_pred_test))
+
+        if st.button("Test F1 Score"):
+            st.write("Test F1 Score:", f1_score(y_test, y_pred_test, average='weighted'))
+
+        if st.button("Test AUC"):
+            try:
+                auc = roc_auc_score(y_test, model.predict_proba(X_test), multi_class="ovr")
+                st.write("Test AUC:", auc)
+            except AttributeError:
+                st.warning("AUC not available for this model.")
+
+# Step 8: Hyperparameter Tuning
+    st.header("Step 7: Hyperparameter Tuning")
     if st.button("Perform Grid Search"):
         param_grid = {}
         if model_choice == "K-Nearest Neighbors":
@@ -125,8 +148,8 @@ if data is not None and target_column and feature_columns:
         else:
             st.info("No hyperparameters available for tuning with this model.")
 
-# Step 8: Download Model
-    st.header("Step 7: Save and Load Model")
+# Step 9: Save and Load Model
+    st.header("Step 8: Save and Load Model")
     if st.button("Save Model"):
         joblib.dump(model, "model.pkl")
         st.write("Model saved as model.pkl")
@@ -136,3 +159,20 @@ if data is not None and target_column and feature_columns:
     if uploaded_model:
         loaded_model = joblib.load(uploaded_model)
         st.write("Loaded model. Enter data to make predictions.")
+
+# Step 10: Single-Sample Prediction
+    st.header("Step 9: Single Sample Prediction")
+    st.write("Enter data for a single sample below:")
+
+    single_sample = []
+    for feature in feature_columns:
+        value = st.number_input(f"Enter {feature} value", value=0.0)
+        single_sample.append(value)
+
+    if st.button("Predict on Single Sample"):
+        if uploaded_model or model:
+            sample = np.array(single_sample).reshape(1, -1)
+            if scaler:
+                sample = scaler.transform(sample)
+            prediction = model.predict(sample)
+            st.write("Prediction for entered sample:", prediction[0])
